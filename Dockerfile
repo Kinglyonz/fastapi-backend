@@ -1,31 +1,20 @@
-# Multi-stage build for optimal image size
-FROM python:3.11-slim as base
-
+FROM node:20-alpine AS builder
 WORKDIR /app
+COPY package*.json ./
+RUN npm install --omit=dev
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy requirements and install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy application code
+FROM node:20-alpine
+WORKDIR /app
+COPY --from=builder /app/node_modules ./node_modules
 COPY . .
 
-# Set environment variables
 ENV HOST=0.0.0.0
 ENV PORT=5001
-ENV PYTHONUNBUFFERED=1
+ENV NODE_ENV=production
 
-# Expose port
 EXPOSE 5001
 
-# Health check for container orchestration
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:5001/health || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:5001/api/health || exit 1
 
-# Run application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "5001"]
+CMD ["npm", "start"]
